@@ -1,15 +1,16 @@
-from fastapi import FastAPI, Depends
-from sqlalchemy.orm import Session
-from database import SessionLocal, engine, Base
-from models import Note
-
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 
-Base.metadata.create_all(bind=engine)
+from auth import create_token, get_current_user, hash_password, verify_password
+from database import Base, SessionLocal, engine
+from models import Note, User
+from schemas import NoteCreate, UserCreate, UserLogin
 
 app = FastAPI()
 
-# CORS for frontend
+Base.metadata.create_all(bind=engine)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# DB dependency
+
 def get_db():
     db = SessionLocal()
     try:
@@ -26,23 +27,61 @@ def get_db():
     finally:
         db.close()
 
-@app.get("/notes")
-def get_notes(db: Session = Depends(get_db)):
-    return db.query(Note).all()
 
-@app.post("/notes")
-def create_note(content: str, db: Session = Depends(get_db)):
-    note = Note(content=content)
-    db.add(note)
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.post("/signup", status_code=201)
+def signup(user: UserCreate, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == user.email).first():
+        raise HTTPException(status_code=400, detail="User already exists")
+    db.add(User(email=user.email, password=hash_password(user.password)))
     db.commit()
-    db.refresh(note)
-    return note
+    return {"message": "User created"}
+
+
+@app.post("/login")
+def login(user: UserLogin, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == user.email).first()
+    if not db_user or not verify_password(user.password, db_user.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return {"access_token": create_token({"sub": db_user.email})}
+
+
+# ── Notes (all routes require a valid JWT) ────────────────────────────────────
+
+@app.get("/notes")
+def get_notes(
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == current_user).first()
+    return db.query(Note).filter(Note.user_id == user.id).all()
+
+
+@app.post("/notes", status_code=201)
+def create_note(
+    note: NoteCreate,
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == current_user).first()
+    new_note = Note(content=note.content, user_id=user.id)
+    db.add(new_note)
+    db.commit()
+    db.refresh(new_note)
+    return new_note
+
 
 @app.delete("/notes/{note_id}")
-def delete_note(note_id: int, db: Session = Depends(get_db)):
-    note = db.query(Note).filter(Note.id == note_id).first()
-    if note:
-        db.delete(note)
-        db.commit()
-        return {"message": "Deleted"}
-    return {"error": "Not found"}
+def delete_note(
+    note_id: int,
+    current_user: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(User.email == current_user).first()
+    note = db.query(Note).filter(Note.id == note_id, Note.user_id == user.id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    db.delete(note)
+    db.commit()
+    return {"message": "Deleted"}

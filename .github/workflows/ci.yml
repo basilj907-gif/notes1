@@ -1,15 +1,3 @@
-
-YAML doesn’t know what ``` is. That’s not syntax — that’s formatting for humans.
-
-GitHub Actions sees that and dies immediately → **line 13 error**.
-
----
-
-## ✅ Fix (clean version — no nonsense)
-
-Use this **exact file**:
-
-:::writing{variant="standard" id="ci002"}
 name: CI Pipeline
 
 on:
@@ -38,29 +26,3 @@ jobs:
 
       - name: Run tests
         run: pytest -v
-:::
-
----
-
-## 🧠 What you did wrong (again, pattern)
-
-You didn’t distinguish between:
-- **Documentation format (Markdown)**
-- **Execution format (YAML)**
-
-That’s a basic but critical boundary.
-
----
-
-## ⚠️ What will probably break next
-
-Even after fixing syntax, expect failures like:
-
-### 1. Tests not found
-If your tests are inside `backend/`, this will fail.
-
-Fix:
-```yaml id="fixpath"
-run: |
-  cd backend
-  pytest -v

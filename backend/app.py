@@ -3,13 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from auth import create_token, get_current_user, hash_password, verify_password
-from database import Base, SessionLocal, engine
+from database import Base, SessionLocal, init_db
 from models import Note, User
 from schemas import NoteCreate, UserCreate, UserLogin
 
 app = FastAPI()
 
-Base.metadata.create_all(bind=engine)
+init_db(Base)
 
 app.add_middleware(
     CORSMiddleware,

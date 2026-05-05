@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 ALGORITHM = "HS256"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 security = HTTPBearer()
 
 
@@ -23,7 +23,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=1)
+    expire = datetime.now(UTC) + timedelta(hours=1)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
